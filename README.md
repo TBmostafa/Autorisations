@@ -19,7 +19,8 @@ autorisation-app/
 | Rôle          | Email                | Mot de passe |
 |---------------|----------------------|--------------|
 | Administrateur| mostafa@gmail.com    | 123456       |
-| Manager       | laila@gmail.com      | 123456       |
+| RH            | laila@gmail.com      | 123456       |
+| Manager       | ayoub@gmail.com      | 123456       |
 | Employé       | ahmed@gmail.com      | 123456       |
 | Employé       | fatima@gmail.com     | 123456       |
 
