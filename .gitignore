@@ -1,0 +1,26 @@
+# Git Ignore for Laravel and Vite
+
+# Dependencies
+/backend/vendor/
+/frontend/node_modules/
+
+# Environment
+/backend/.env
+/frontend/.env
+/backend/.env.backup
+/backend/.env.production
+
+# Storage
+/backend/storage/*.key
+/backend/storage/framework/cache/data/*
+/backend/storage/framework/views/*.php
+/backend/storage/framework/sessions/*
+/backend/storage/logs/*.log
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Frontend build
+/frontend/dist/
