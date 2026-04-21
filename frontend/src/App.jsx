@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import HomePage from './pages/HomePage.jsx';
 import DashboardLayout from './components/shared/DashboardLayout.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import MesDemandes from './pages/MesDemandes.jsx';
@@ -26,14 +27,14 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
 
-      <Route path="/" element={
+      <Route element={
         <PrivateRoute>
           <DashboardLayout />
         </PrivateRoute>
       }>
-        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="demandes" element={<MesDemandes />} />
         <Route path="demandes/nouvelle" element={
@@ -76,7 +77,7 @@ export default function App() {
         <Route path="profil" element={<Profil />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
