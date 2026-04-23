@@ -86,4 +86,9 @@ export const departementService = {
   delete: (id) => api.delete(`/departements/${id}`),
 };
 
+// ── Chatbot ───────────────────────────────────────────
+export const chatbotService = {
+  sendMessage: (message) => api.post('/chatbot/message', { message }),
+};
+
 export default api;

@@ -2,6 +2,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { notifService } from '../../services/api.js';
+import { ChatProvider } from '../../context/ChatContext.jsx';
+import ChatWidget from '../chat/ChatWidget.jsx';
 import {
   LayoutDashboard,
   FileText,
@@ -130,6 +132,7 @@ export default function DashboardLayout() {
   };
 
   return (
+    <ChatProvider>
     <div
       className="app-layout"
       style={{
@@ -502,6 +505,8 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+      <ChatWidget />
     </div>
+    </ChatProvider>
   );
 }

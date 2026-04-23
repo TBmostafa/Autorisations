@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Demande;
 use App\Models\User;
 use App\Models\Notification;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class DemandeController extends Controller
 {
+    public function __construct(private EmailNotificationService $emailService) {}
     /**
      * Liste des demandes (filtrée par rôle)
      */
@@ -122,6 +124,9 @@ class DemandeController extends Controller
                 'type' => 'info',
                 'demande_id' => $demande->id,
             ]);
+
+            // Notification email au manager
+            $this->emailService->notifierNouvelleDemandeManager($demande->load('employe'));
         }
 
         // Notification aux administrateurs
@@ -284,6 +289,14 @@ class DemandeController extends Controller
             'demande_id' => $demande->id,
         ]);
 
+        // Notification email à l'employé
+        $this->emailService->notifierEmployeChangementStatut($demande->load('employe'));
+
+        // Notification email au RH si validée par manager
+        if ($request->statut === 'validee_responsable') {
+            $this->emailService->notifierRhDemandeValidee($demande->load(['employe', 'manager']));
+        }
+
         // Si validée par manager, notifier les RH
         if ($request->statut === 'validee_responsable') {
             $rhs = User::where('role', 'rh')->where('is_active', true)->get();
@@ -399,6 +412,7 @@ class DemandeController extends Controller
             return $response;
 
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("PDF Generation Error (ID $id): " . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json(['message' => 'Erreur PDF : ' . $e->getMessage()], 500);
         }
     }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\NotificationController;
@@ -75,4 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Managers list (accessible par employés pour sélection)
     Route::get('/managers', [UserController::class, 'managers']);
     Route::get('/equipe', [UserController::class, 'equipe'])->middleware('role:manager');
+
+    // Chatbot Assistant
+    Route::post('/chatbot/message', [ChatbotController::class, 'message']);
 });

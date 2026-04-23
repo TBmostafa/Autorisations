@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\Demande;
+use App\Models\Departement;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -11,13 +12,19 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Départements
+        $depDirection = Departement::firstOrCreate(['nom' => 'Direction']);
+        $depRh = Departement::firstOrCreate(['nom' => 'Ressources Humaines']);
+        $depInfo = Departement::firstOrCreate(['nom' => 'Informatique']);
+        $depCompta = Departement::firstOrCreate(['nom' => 'Comptabilité']);
+
         // Admin
         User::create([
             'name' => 'Mostafa Admin',
-            'email' => 'mostafa@gmail.com',
+            'email' => 'mostafa.taibane@gmail.com',
             'password' => Hash::make('123456'),
             'role' => 'admin',
-            'departement' => 'Direction',
+            'departement_id' => $depDirection->id,
             'poste' => 'Administrateur Système',
             'telephone' => '0600000001',
             'is_active' => true,
@@ -26,10 +33,10 @@ class DatabaseSeeder extends Seeder
         // Manager
         $manager = User::create([
             'name' => 'Laila Manager',
-            'email' => 'laila@gmail.com',
+            'email' => 'lailatalb52@gmail.com',
             'password' => Hash::make('123456'),
             'role' => 'manager',
-            'departement' => 'Ressources Humaines',
+            'departement_id' => $depRh->id,
             'poste' => 'Responsable RH',
             'telephone' => '0600000002',
             'is_active' => true,
@@ -41,7 +48,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'ahmed@gmail.com',
             'password' => Hash::make('123456'),
             'role' => 'employe',
-            'departement' => 'Informatique',
+            'departement_id' => $depInfo->id,
             'poste' => 'Développeur',
             'telephone' => '0600000003',
             'is_active' => true,
@@ -52,7 +59,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'fatima@gmail.com',
             'password' => Hash::make('123456'),
             'role' => 'employe',
-            'departement' => 'Comptabilité',
+            'departement_id' => $depCompta->id,
             'poste' => 'Comptable',
             'telephone' => '0600000004',
             'is_active' => true,
@@ -66,7 +73,7 @@ class DatabaseSeeder extends Seeder
             'date_debut' => '2024-02-10',
             'date_fin' => '2024-02-15',
             'motif' => 'Vacances familiales',
-            'statut' => 'acceptee',
+            'statut' => 'validee_definitivement',
             'commentaire_employe' => 'Je souhaite prendre mes congés.',
             'commentaire_manager' => 'Approuvé. Bon repos !',
             'date_traitement' => now(),
@@ -79,7 +86,7 @@ class DatabaseSeeder extends Seeder
             'date_debut' => '2024-03-05',
             'date_fin' => '2024-03-05',
             'motif' => 'Rendez-vous médical urgent',
-            'statut' => 'en_attente',
+            'statut' => 'en_attente_responsable',
             'commentaire_employe' => 'Rendez-vous chez le médecin le matin.',
         ]);
 
@@ -90,7 +97,7 @@ class DatabaseSeeder extends Seeder
             'date_debut' => '2024-03-10',
             'date_fin' => '2024-03-10',
             'motif' => 'Démarches administratives à la mairie',
-            'statut' => 'refusee',
+            'statut' => 'refusee_responsable',
             'commentaire_manager' => 'Refusé pour ce jour, forte charge de travail.',
             'date_traitement' => now(),
         ]);
@@ -102,7 +109,7 @@ class DatabaseSeeder extends Seeder
             'date_debut' => '2024-03-20',
             'date_fin' => '2024-03-25',
             'motif' => 'Grippe saisonnière avec certificat médical',
-            'statut' => 'en_attente',
+            'statut' => 'en_attente_responsable',
         ]);
 
         // Demandes assignées à l'Admin
@@ -115,7 +122,7 @@ class DatabaseSeeder extends Seeder
             'date_debut' => now()->addDays(2)->toDateString(),
             'date_fin' => now()->addDays(2)->toDateString(),
             'motif' => 'Formation technique avancée',
-            'statut' => 'en_attente',
+            'statut' => 'en_attente_responsable',
             'commentaire_employe' => 'Je souhaite assister à une formation React.',
         ]);
 
