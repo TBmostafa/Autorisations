@@ -29,7 +29,13 @@ export default function Notifications() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(1); }, []);
+  useEffect(() => {
+    load(1);
+    // Marquer toutes les notifications comme lues à l'ouverture
+    notifService.marquerToutesLues()
+      .then(() => window.dispatchEvent(new CustomEvent('notifications-updated')))
+      .catch(() => {});
+  }, []);
 
   const marquerLue = async (id) => {
     await notifService.marquerLue(id);

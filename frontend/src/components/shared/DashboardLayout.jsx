@@ -26,19 +26,20 @@ export default function DashboardLayout() {
   const [notifCount, setNotifCount] = useState(0);
 
   useEffect(() => {
-    notifService
-      .nonLues()
-      .then((res) => setNotifCount(res.data.count))
-      .catch(() => {});
+    const fetchCount = () => {
+      notifService.nonLues().then((res) => setNotifCount(res.data.count)).catch(() => {});
+    };
 
-    const interval = setInterval(() => {
-      notifService
-        .nonLues()
-        .then((res) => setNotifCount(res.data.count))
-        .catch(() => {});
-    }, 30000);
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
 
-    return () => clearInterval(interval);
+    // Mettre à jour le compteur quand les notifications changent
+    window.addEventListener('notifications-updated', fetchCount);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', fetchCount);
+    };
   }, []);
 
   const handleLogout = async () => {

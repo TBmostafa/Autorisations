@@ -71,8 +71,10 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $request->user();
-        $notifCount = $user->notifications()->where('lu', false)->count();
+        $user = $request->user()->load('departement');
+        $notifCount = \App\Models\Notification::where('user_id', $user->id)
+            ->where('lu', false)
+            ->count();
 
         return response()->json([
             'user' => [

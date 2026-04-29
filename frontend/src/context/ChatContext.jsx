@@ -24,6 +24,10 @@ export function ChatProvider({ children }) {
     return msg;
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
+
   const toggleChat = useCallback(() => setIsOpen(v => !v), []);
 
   const clearHistory = useCallback(() => {
@@ -40,6 +44,7 @@ export function ChatProvider({ children }) {
       addMessage,
       toggleChat,
       clearHistory,
+      clearMessages,
     }}>
       {children}
     </ChatContext.Provider>

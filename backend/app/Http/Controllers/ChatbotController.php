@@ -23,7 +23,7 @@ class ChatbotController extends Controller
         try {
             $result = $this->chatbotService->handle(
                 $request->input('message'),
-                $request->user()   // jamais un ID du corps de la requête
+                $request->user()->load('departement')
             );
 
             return response()->json($result);

@@ -10,20 +10,28 @@ import {
 } from 'recharts';
 import {
   Clock, CheckCircle, XCircle, FileText, TrendingUp, Eye,
-  Plus, ArrowRight,
+  Plus, ArrowRight, Users, Search,
 } from 'lucide-react';
 
 const TYPE_LABELS = {
   conge: 'Congé',
   autorisation_absence: 'Absence',
   sortie: 'Sortie',
+  sortie_urgente: 'Sortie Urgente',
 };
-const PIE_COLORS = ['#1e4080','#f59e0b','#059669','#0284c7','#7c3aed','#94a3b8'];
+
+const TYPE_COLORS = {
+  conge: '#1e4080',
+  autorisation_absence: '#f59e0b',
+  sortie: '#059669',
+  sortie_urgente: '#ef4444',
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchActifs, setSearchActifs] = useState('');
 
   useEffect(() => {
     demandeService.stats()
@@ -62,6 +70,8 @@ export default function Dashboard() {
     name: TYPE_LABELS[item.type] || item.type,
     total: item.total,
   })) || [];
+
+  const PIE_COLORS = ['#1e4080','#f59e0b','#059669','#ef4444','#0284c7','#94a3b8'];
 
   const LoadingSkeleton = () => (
     <div className="fade-in">
@@ -235,6 +245,115 @@ export default function Dashboard() {
                 <Plus size={16} /> Créer une demande
               </Link>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Employés fréquents — admin, manager, rh */}
+      {['admin','manager','rh'].includes(user?.role) && stats?.employes_frequents?.length > 0 && (
+        <div className="card" style={{marginTop: 24}}>
+          <div style={{padding:'16px 22px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap'}}>
+            <div style={{display:'flex', alignItems:'center', gap:10}}>
+              <div style={{width:34, height:34, borderRadius:10, background:'#ede9fe', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                <Users size={18} color="#7c3aed" />
+              </div>
+              <div>
+                <h3 style={{fontSize:15, fontWeight:700, color:'var(--gray-900)', margin:0}}>Employés les plus actifs</h3>
+                <p style={{fontSize:12, color:'var(--gray-400)', margin:0}}>Top 5 par nombre de demandes soumises</p>
+              </div>
+            </div>
+            {/* Barre de recherche */}
+            <div style={{position:'relative', minWidth:200}}>
+              <Search size={14} style={{position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--gray-400)', pointerEvents:'none'}} />
+              <input
+                type="text"
+                placeholder="Rechercher un employé..."
+                value={searchActifs}
+                onChange={e => setSearchActifs(e.target.value)}
+                style={{
+                  paddingLeft:30, paddingRight:10, paddingTop:7, paddingBottom:7,
+                  border:'1.5px solid var(--gray-200)', borderRadius:8,
+                  fontSize:12, outline:'none', width:'100%',
+                  fontFamily:'inherit', color:'var(--gray-800)',
+                  transition:'border-color 0.15s',
+                }}
+                onFocus={e => e.target.style.borderColor='#7c3aed'}
+                onBlur={e => e.target.style.borderColor='var(--gray-200)'}
+              />
+            </div>
+          </div>
+          <div style={{padding:'8px 0'}}>
+            {(() => {
+              const q = searchActifs.trim().toLowerCase();
+              const filtered = q
+                ? stats.employes_frequents.filter(item =>
+                    item.employe?.name?.toLowerCase().includes(q) ||
+                    item.employe?.email?.toLowerCase().includes(q)
+                  )
+                : stats.employes_frequents;
+
+              if (filtered.length === 0) return (
+                <div style={{padding:'28px 22px', textAlign:'center', color:'var(--gray-400)', fontSize:13}}>
+                  Aucun employé trouvé pour « {searchActifs} »
+                </div>
+              );
+
+              return filtered.map((item, i) => {
+                const maxTotal = stats.employes_frequents[0]?.total || 1;
+                const pct = Math.round((item.total / maxTotal) * 100);
+                return (
+                  <div key={i} style={{
+                    padding:'14px 22px',
+                    borderBottom: i < filtered.length - 1 ? '1px solid var(--gray-100)' : 'none',
+                  }}>
+                    <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8}}>
+                      <div style={{display:'flex', alignItems:'center', gap:10}}>
+                        <div style={{
+                          width:32, height:32, borderRadius:8,
+                          background:'#ede9fe', color:'#7c3aed',
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          fontWeight:800, fontSize:13, flexShrink:0,
+                        }}>
+                          {item.employe?.name?.[0]?.toUpperCase() ?? '?'}
+                        </div>
+                        <div>
+                          <div style={{fontWeight:700, fontSize:14, color:'var(--gray-900)'}}>{item.employe?.name ?? '—'}</div>
+                          <div style={{fontSize:11, color:'var(--gray-400)'}}>{item.employe?.email ?? ''}</div>
+                        </div>
+                      </div>
+                      <div style={{
+                        background:'#ede9fe', color:'#7c3aed',
+                        fontWeight:800, fontSize:13,
+                        padding:'3px 10px', borderRadius:99,
+                      }}>
+                        {item.total} demande{item.total > 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div style={{height:6, background:'var(--gray-100)', borderRadius:99, marginBottom:8, overflow:'hidden'}}>
+                      <div style={{
+                        height:'100%', width:`${pct}%`,
+                        background:'linear-gradient(90deg, #7c3aed, #a78bfa)',
+                        borderRadius:99, transition:'width 0.6s ease',
+                      }} />
+                    </div>
+                    <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+                      {Object.entries(item.par_type).sort((a,b) => b[1]-a[1]).map(([type, count]) => (
+                        <span key={type} style={{
+                          display:'inline-flex', alignItems:'center', gap:4,
+                          padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:600,
+                          background: TYPE_COLORS[type] ? `${TYPE_COLORS[type]}18` : '#f1f5f9',
+                          color: TYPE_COLORS[type] ?? '#64748b',
+                          border: `1px solid ${TYPE_COLORS[type] ? `${TYPE_COLORS[type]}33` : '#e2e8f0'}`,
+                        }}>
+                          <span style={{width:6, height:6, borderRadius:'50%', background: TYPE_COLORS[type] ?? '#94a3b8', flexShrink:0}} />
+                          {TYPE_LABELS[type] ?? type} · {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       )}

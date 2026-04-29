@@ -11,6 +11,7 @@ const TYPE_LABELS = {
   conge: 'Congé',
   autorisation_absence: "Absence",
   sortie: 'Sortie',
+  sortie_urgente: 'Sortie Urgente ⚡',
 };
 const STATUT_LABEL = {
   en_attente_responsable: 'En attente Manager',
@@ -195,7 +196,37 @@ export default function MesDemandes() {
                             <td style={{ fontSize: 13, fontWeight: 600, textAlign: 'center' }}>{d.type === 'sortie' ? '-' : `${d.duree} j`}</td>
                           </>
                         )}
-                        <td><span className={`badge badge-${d.statut}`}>{STATUT_LABEL[d.statut]}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span className={`badge badge-${d.statut}`}>{STATUT_LABEL[d.statut]}</span>
+                            {d.type === 'sortie_urgente' && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                                background: d.justification_acceptee === true ? '#f0fdf4'
+                                  : d.justification_acceptee === false ? '#fef2f2'
+                                  : d.justification_urgence ? '#eff6ff'
+                                  : '#fffbeb',
+                                color: d.justification_acceptee === true ? '#15803d'
+                                  : d.justification_acceptee === false ? '#b91c1c'
+                                  : d.justification_urgence ? '#1d4ed8'
+                                  : '#92400e',
+                                border: `1px solid ${
+                                  d.justification_acceptee === true ? '#86efac'
+                                  : d.justification_acceptee === false ? '#fca5a5'
+                                  : d.justification_urgence ? '#93c5fd'
+                                  : '#fcd34d'
+                                }`,
+                                width: 'fit-content',
+                              }}>
+                                {d.justification_acceptee === true ? '✓ Justifiée'
+                                  : d.justification_acceptee === false ? '✗ Justification refusée'
+                                  : d.justification_urgence ? '⏳ En cours de vérification'
+                                  : '⏳ Justification à soumettre'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td style={{ fontSize: 12, color: 'var(--gray-400)' }}>
                           {d.created_at ? format(parseISO(d.created_at), 'd MMM yyyy', { locale: fr }) : '-'}
                         </td>

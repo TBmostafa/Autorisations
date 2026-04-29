@@ -44,9 +44,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}', [DemandeController::class, 'update']);
         Route::delete('/{id}', [DemandeController::class, 'cancel']);
 
-        // Manager/Admin/RH: traiter
+        // Employé: soumettre la justification d'une sortie urgente
+        Route::post('/{id}/justifier', [DemandeController::class, 'justifier']);
+
+        // RH: accepter/refuser la justification d'une sortie urgente
+        Route::put('/{id}/accepter-justification', [DemandeController::class, 'accepterJustification'])
+            ->middleware('role:rh');
+
+        // Manager/RH: traiter
         Route::put('/{id}/traiter', [DemandeController::class, 'traiter'])
-            ->middleware('role:manager,admin,rh');
+            ->middleware('role:manager,rh');
 
         // Admin: archiver
         Route::post('/archiver', [DemandeController::class, 'archiver'])

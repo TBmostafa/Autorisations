@@ -3,29 +3,64 @@ import { useChat } from '../../context/ChatContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { chatbotService } from '../../services/api.js';
 
-const SUGGESTIONS = [
-  'Combien de demandes en attente ?',
-  'Comment créer une demande ?',
-  'Quels sont les types de demandes ?',
-  'Qui est mon manager ?',
-  'Qui est le RH ?',
-  'Mon profil',
-  'Ma dernière demande',
-  'Total de mes demandes',
-];
+const SUGGESTIONS_BY_ROLE = {
+  employe: [
+    'Mes demandes en attente',
+    'Créer une demande',
+    'Quels sont les types de demandes ?',
+    'Qui est mon manager ?',
+    'Qui est le RH ?',
+    'Mon profil',
+    'Ma dernière demande',
+    'Total de mes demandes',
+  ],
+  manager: [
+    'Demandes en attente de mon équipe',
+    'Comment valider une demande ?',
+    'Comment refuser une demande ?',
+    'Statistiques de mon équipe',
+    'Ma dernière demande équipe',
+    'Mon profil',
+  ],
+  rh: [
+    'Demandes à valider',
+    'Comment valider définitivement ?',
+    'Comment refuser une demande ?',
+    'Liste des membres RH',
+    'Total des demandes',
+    'Mon profil',
+  ],
+  admin: [
+    'Gérer les utilisateurs',
+    'Total des demandes',
+    'Demandes en attente',
+    'Ma dernière demande',
+    'Mon profil',
+  ],
+};
+
+const WELCOME_BY_ROLE = {
+  employe: (prenom) => `Bonjour ${prenom} 👋 Je suis votre assistant. Vous pouvez me demander l'état de vos demandes, créer une nouvelle demande ou contacter votre manager.`,
+  manager: (prenom) => `Bonjour ${prenom} 👋 Je suis votre assistant. Je peux vous informer sur les demandes en attente de votre équipe ou vous guider pour les valider.`,
+  rh:      (prenom) => `Bonjour ${prenom} 👋 Je suis votre assistant RH. Je peux vous indiquer les demandes en attente de validation finale ou vous aider à les traiter.`,
+  admin:   (prenom) => `Bonjour ${prenom} 👋 Je suis votre assistant administrateur. Je peux vous aider à gérer les utilisateurs, les départements et suivre les demandes.`,
+};
 
 export default function ChatWidget() {
-  const { messages, isOpen, isLoading, setIsLoading, addMessage, toggleChat } = useChat();
+  const { messages, isOpen, isLoading, setIsLoading, addMessage, toggleChat, clearMessages } = useChat();
   const { user } = useAuth();
   const [input, setInput]       = useState('');
   const [welcomed, setWelcomed] = useState(false);
   const messagesEndRef          = useRef(null);
 
-  // Message de bienvenue à la première ouverture
+  const suggestions = SUGGESTIONS_BY_ROLE[user?.role] ?? SUGGESTIONS_BY_ROLE.employe;
+
+  // Message de bienvenue personnalisé selon le rôle
   useEffect(() => {
     if (isOpen && !welcomed && user) {
       const prenom = user.name?.split(' ')[0] ?? user.name;
-      addMessage('bot', `Bonjour ${prenom} 👋 Je suis votre assistant. Comment puis-je vous aider ?`);
+      const welcomeFn = WELCOME_BY_ROLE[user.role] ?? WELCOME_BY_ROLE.employe;
+      addMessage('bot', welcomeFn(prenom));
       setWelcomed(true);
     }
   }, [isOpen, welcomed, user, addMessage]);
@@ -59,7 +94,14 @@ export default function ChatWidget() {
     }
   };
 
-  const showSuggestions = messages.length <= 1;
+  // Afficher les suggestions uniquement avant toute question (message de bienvenue seul)
+  const showSuggestions = messages.length <= 1 && !isLoading;
+
+  const handleClearHistory = () => {
+    clearMessages();
+    setWelcomed(false);
+    // Le useEffect [isOpen, welcomed] détecte welcomed=false et ajoute le message de bienvenue
+  };
 
   return (
     <>
@@ -203,7 +245,20 @@ export default function ChatWidget() {
                 <div style={{ fontSize: 11, opacity: 0.75 }}>Toujours disponible</div>
               </div>
             </div>
-            <button className="chat-close-btn" onClick={toggleChat} aria-label="Fermer">✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {messages.length > 1 && (
+                <button
+                  className="chat-close-btn"
+                  onClick={handleClearHistory}
+                  aria-label="Effacer la conversation"
+                  title="Effacer la conversation"
+                  style={{ fontSize: 13, width: 'auto', padding: '0 8px', borderRadius: 8, gap: 4, display: 'flex', alignItems: 'center' }}
+                >
+                  🗑 Effacer
+                </button>
+              )}
+              <button className="chat-close-btn" onClick={toggleChat} aria-label="Fermer">✕</button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -228,7 +283,7 @@ export default function ChatWidget() {
           {/* Suggestions */}
           {showSuggestions && (
             <div className="chat-suggestions">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   className="suggestion-chip"

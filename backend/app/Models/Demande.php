@@ -16,6 +16,8 @@ class Demande extends Model
         'date_debut',
         'date_fin',
         'motif',
+        'justification_urgence',
+        'justification_acceptee',
         'statut',
         'commentaire_employe',
         'commentaire_manager',
@@ -26,10 +28,11 @@ class Demande extends Model
     ];
 
     protected $casts = [
-        'date_debut' => 'datetime',
-        'date_fin' => 'datetime',
-        'date_traitement' => 'datetime',
-        'is_archived' => 'boolean',
+        'date_debut'             => 'datetime',
+        'date_fin'               => 'datetime',
+        'date_traitement'        => 'datetime',
+        'is_archived'            => 'boolean',
+        'justification_acceptee' => 'boolean',
     ];
 
     protected $appends = [
@@ -38,10 +41,10 @@ class Demande extends Model
     ];
 
     public static $types = [
-        'conge' => 'Congé',
+        'conge'                => 'Congé',
         'autorisation_absence' => 'Autorisation d\'Absence',
-        'sortie' => 'Autorisation de Sortie',
-    
+        'sortie'               => 'Autorisation de Sortie',
+        'sortie_urgente'       => 'Sortie Urgente',
     ];
 
     // Relations

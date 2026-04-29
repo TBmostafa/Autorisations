@@ -10,8 +10,9 @@ import SignaturePad from '../components/shared/SignaturePad';
 
 const TYPE_LABELS = {
   conge: 'Congé',
-   autorisation_absence: "Absence",
+  autorisation_absence: "Absence",
   sortie: 'Sortie',
+  sortie_urgente: 'Sortie Urgente ⚡',
 };
 const STATUT_LABEL = {
   en_attente_responsable: 'En attente Manager',
@@ -175,7 +176,37 @@ export default function DemandesManager() {
                             <td style={{ fontSize: 13, fontWeight: 600, textAlign: 'center' }}>{d.type === 'sortie' ? '-' : `${d.duree} j`}</td>
                           </>
                         )}
-                        <td><span className={`badge badge-${d.statut}`}>{STATUT_LABEL[d.statut]}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span className={`badge badge-${d.statut}`}>{STATUT_LABEL[d.statut]}</span>
+                            {d.type === 'sortie_urgente' && user.role === 'rh' && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                                background: d.justification_acceptee === true ? '#f0fdf4'
+                                  : d.justification_acceptee === false ? '#fef2f2'
+                                  : d.justification_urgence ? '#eff6ff'
+                                  : '#fffbeb',
+                                color: d.justification_acceptee === true ? '#15803d'
+                                  : d.justification_acceptee === false ? '#b91c1c'
+                                  : d.justification_urgence ? '#1d4ed8'
+                                  : '#92400e',
+                                border: `1px solid ${
+                                  d.justification_acceptee === true ? '#86efac'
+                                  : d.justification_acceptee === false ? '#fca5a5'
+                                  : d.justification_urgence ? '#93c5fd'
+                                  : '#fcd34d'
+                                }`,
+                                width: 'fit-content',
+                              }}>
+                                {d.justification_acceptee === true ? '✓ Justifiée'
+                                  : d.justification_acceptee === false ? '✗ Justification refusée'
+                                  : d.justification_urgence ? '⏳ En attente validation'
+                                  : '⏳ En attente justification'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td style={{ fontSize: 12, color: 'var(--gray-400)' }}>
                           {d.created_at ? format(parseISO(d.created_at), 'd MMM yyyy', { locale: fr }) : '-'}
                         </td>
@@ -184,7 +215,7 @@ export default function DemandesManager() {
                             <Link to={`/demandes/${d.id}`} className="btn btn-ghost btn-icon btn-sm" title="Voir">
                               <Eye size={15} />
                             </Link>
-                            {(d.statut === 'validee_definitivement' || (d.statut === 'validee_responsable' && user.role === 'admin')) && (
+                            {d.statut === 'validee_definitivement' && (
                               <button className="btn btn-ghost btn-icon btn-sm" title="Télécharger" onClick={() => {
                                 toast.loading('Génération du PDF...', { id: 'pdf-loading' });
                                 demandeService.exportPdf(d.id).then(res => {
@@ -201,13 +232,13 @@ export default function DemandesManager() {
                                 <Download size={15} />
                               </button>
                             )}
-                            {((user.role === 'manager' && d.statut === 'en_attente_responsable') || (user.role === 'rh' && d.statut === 'validee_responsable') || (user.role === 'admin' && (d.statut === 'en_attente_responsable' || d.statut === 'validee_responsable'))) && (
+                            {((user.role === 'manager' && d.statut === 'en_attente_responsable') || (user.role === 'rh' && d.statut === 'validee_responsable')) && (
                               <>
                                 <button className="btn btn-icon btn-sm" title="Accepter"
                                   style={{ background: 'var(--success-bg)', color: 'var(--success)', border: 'none' }}
                                   onClick={() => {
                                     let action = 'validee_responsable';
-                                    if (user.role === 'rh' || (user.role === 'admin' && d.statut === 'validee_responsable')) action = 'validee_definitivement';
+                                    if (user.role === 'rh') action = 'validee_definitivement';
                                     setQuickModal({ demande: d, action }); setComment(''); setSignature('');
                                   }}>
                                   <CheckCircle size={15} />
@@ -216,7 +247,7 @@ export default function DemandesManager() {
                                   style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none' }}
                                   onClick={() => {
                                     let action = 'refusee_responsable';
-                                    if (user.role === 'rh' || (user.role === 'admin' && d.statut === 'validee_responsable')) action = 'refusee_rh';
+                                    if (user.role === 'rh') action = 'refusee_rh';
                                     setQuickModal({ demande: d, action }); setComment(''); setSignature('');
                                   }}>
                                   <XCircle size={15} />

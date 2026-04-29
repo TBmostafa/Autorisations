@@ -5,13 +5,14 @@ import { useAuth } from '../context/AuthContext.jsx';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, Download, Edit2, CheckCircle, XCircle, MessageSquare, PenTool } from 'lucide-react';
+import { ArrowLeft, Download, Edit2, CheckCircle, XCircle, MessageSquare, PenTool, Zap, Clock } from 'lucide-react';
 import SignaturePad from '../components/shared/SignaturePad';
 
 const TYPE_LABELS = {
   conge: 'Congé',
   autorisation_absence: "Autorisation d'Absence",
   sortie: 'Sortie',
+  sortie_urgente: 'Sortie Urgente ⚡',
 };
 
 export default function DetailDemande() {
@@ -21,8 +22,11 @@ export default function DetailDemande() {
   const [demande, setDemande] = useState(null);
   const [loading, setLoading] = useState(true);
   const [traitement, setTraitement] = useState({ statut: '', commentaire_manager: '', signature_manager: '' });
-  const [processingAction, setProcessingAction] = useState(null); // 'accepter', 'refuser' ou null
+  const [processingAction, setProcessingAction] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [justificationText, setJustificationText] = useState('');
+  const [submittingJustif, setSubmittingJustif] = useState(false);
+  const [acceptingJustif, setAcceptingJustif] = useState(false);
 
   const load = () => {
     demandeService.get(id)
@@ -33,18 +37,49 @@ export default function DetailDemande() {
 
   useEffect(() => { load(); }, [id]);
 
+  const handleJustifier = async () => {
+    if (justificationText.trim().length < 10) {
+      toast.error('La justification doit contenir au moins 10 caractères.');
+      return;
+    }
+    setSubmittingJustif(true);
+    try {
+      await demandeService.justifier(id, justificationText.trim());
+      toast.success('Justification enregistrée avec succès !');
+      setJustificationText('');
+      load();
+    } catch (err) {
+      toast.error(err.friendlyMessage || 'Erreur');
+    } finally {
+      setSubmittingJustif(false);
+    }
+  };
+
+  const handleAccepterJustification = async (acceptee) => {
+    setAcceptingJustif(true);
+    try {
+      await demandeService.accepterJustification(id, acceptee);
+      toast.success(acceptee ? 'Justification acceptée !' : 'Justification refusée.');
+      load();
+    } catch (err) {
+      toast.error(err.friendlyMessage || 'Erreur');
+    } finally {
+      setAcceptingJustif(false);
+    }
+  };
+
   const handleTraiter = async (actionStr) => {
     let statut = '';
-    const isRhOrAdminRh = user.role === 'rh' || (user.role === 'admin' && demande.statut === 'validee_responsable');
+    const isRhFinalStep = user.role === 'rh';
 
     if (actionStr === 'accepter') {
-      statut = isRhOrAdminRh ? 'validee_definitivement' : 'validee_responsable';
+      statut = isRhFinalStep ? 'validee_definitivement' : 'validee_responsable';
     } else {
-      statut = isRhOrAdminRh ? 'refusee_rh' : 'refusee_responsable';
+      statut = isRhFinalStep ? 'refusee_rh' : 'refusee_responsable';
     }
 
     // Signature obligatoire seulement pour le manager (1ère étape)
-    if (actionStr === 'accepter' && !isRhOrAdminRh && !traitement.signature_manager) {
+    if (actionStr === 'accepter' && !isRhFinalStep && !traitement.signature_manager) {
       toast.error('La signature est obligatoire pour valider la demande.');
       return;
     }
@@ -54,7 +89,7 @@ export default function DetailDemande() {
       await demandeService.traiter(id, { 
         statut, 
         commentaire_manager: traitement.commentaire_manager,
-        signature_manager: isRhOrAdminRh ? null : traitement.signature_manager
+        signature_manager: isRhFinalStep ? null : traitement.signature_manager
       });
       toast.success(`Demande traitée avec succès !`);
       setShowForm(false);
@@ -90,14 +125,14 @@ export default function DetailDemande() {
   );
   if (!demande) return null;
 
-  const canTraiter = ((user.role === 'manager' && demande.statut === 'en_attente_responsable') || (user.role === 'rh' && demande.statut === 'validee_responsable') || (user.role === 'admin' && (demande.statut === 'en_attente_responsable' || demande.statut === 'validee_responsable')));
+  const canTraiter = ((user.role === 'manager' && demande.statut === 'en_attente_responsable') || (user.role === 'rh' && demande.statut === 'validee_responsable'));
 
   const INFO = [
     { label: 'Type de demande', value: TYPE_LABELS[demande.type] || demande.type },
-    { label: demande.type === 'sortie' ? 'Date de Sortie' : 'Date de début', value: demande.date_debut ? format(parseISO(demande.date_debut), demande.type === 'sortie' ? 'd MMMM yyyy à HH:mm' : 'd MMMM yyyy', { locale: fr }) : '-' },
-    demande.type === 'sortie' && { label: 'Heure de retour', value: demande.date_fin ? format(parseISO(demande.date_fin), 'HH:mm', { locale: fr }) : '-' },
-    demande.type !== 'sortie' && { label: 'Date de fin', value: demande.date_fin ? format(parseISO(demande.date_fin), 'd MMMM yyyy', { locale: fr }) : '-' },
-    demande.type !== 'sortie' && { label: 'Durée', value: `${demande.duree} jour(s)` },
+    { label: demande.type === 'sortie' || demande.type === 'sortie_urgente' ? 'Date de Sortie' : 'Date de début', value: demande.date_debut ? format(parseISO(demande.date_debut), demande.type === 'sortie' || demande.type === 'sortie_urgente' ? 'd MMMM yyyy à HH:mm' : 'd MMMM yyyy', { locale: fr }) : '-' },
+    (demande.type === 'sortie' || demande.type === 'sortie_urgente') && { label: 'Heure de retour', value: demande.date_fin ? format(parseISO(demande.date_fin), 'HH:mm', { locale: fr }) : '-' },
+    demande.type !== 'sortie' && demande.type !== 'sortie_urgente' && { label: 'Date de fin', value: demande.date_fin ? format(parseISO(demande.date_fin), 'd MMMM yyyy', { locale: fr }) : '-' },
+    demande.type !== 'sortie' && demande.type !== 'sortie_urgente' && { label: 'Durée', value: `${demande.duree} jour(s)` },
     { label: 'Motif', value: demande.motif },
     { label: 'Créée le', value: demande.created_at ? format(parseISO(demande.created_at), 'd MMMM yyyy à HH:mm', { locale: fr }) : '-' },
     demande.date_traitement && { label: 'Traitée le', value: format(parseISO(demande.date_traitement), 'd MMMM yyyy à HH:mm', { locale: fr }) },
@@ -147,6 +182,46 @@ export default function DetailDemande() {
         }[demande.statut]}
       </div>
 
+      {/* Badge justification pour sortie urgente — visible RH + rappel employé */}
+      {demande.type === 'sortie_urgente' && (user.role === 'rh' || (user.role === 'employe' && demande.user_id === user.id)) && (
+        <div style={{
+          padding: '10px 16px', borderRadius: 10, marginBottom: 16,
+          background: demande.justification_acceptee === true ? '#f0fdf4'
+            : demande.justification_acceptee === false ? '#fef2f2'
+            : demande.justification_urgence ? '#eff6ff'
+            : '#fffbeb',
+          border: `1.5px solid ${
+            demande.justification_acceptee === true ? '#86efac'
+            : demande.justification_acceptee === false ? '#fca5a5'
+            : demande.justification_urgence ? '#93c5fd'
+            : '#fcd34d'
+          }`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          {demande.justification_acceptee === true && <CheckCircle size={16} color="#16a34a" />}
+          {demande.justification_acceptee === false && <XCircle size={16} color="#dc2626" />}
+          {demande.justification_acceptee === null && demande.justification_urgence && <Clock size={16} color="#2563eb" />}
+          {demande.justification_acceptee === null && !demande.justification_urgence && <Clock size={16} color="#d97706" />}
+          <span style={{
+            fontSize: 13, fontWeight: 700,
+            color: demande.justification_acceptee === true ? '#15803d'
+              : demande.justification_acceptee === false ? '#b91c1c'
+              : demande.justification_urgence ? '#1d4ed8'
+              : '#92400e',
+          }}>
+            {demande.justification_acceptee === true ? 'Justifiée'
+              : demande.justification_acceptee === false ? 'Justification refusée'
+              : demande.justification_urgence ? 'En attente de validation RH'
+              : 'En attente de justification'}
+          </span>
+          {!demande.justification_urgence && user.role === 'employe' && demande.user_id === user.id && (
+            <span style={{ fontSize: 12, color: '#92400e', marginLeft: 4 }}>
+              — Veuillez soumettre votre justification ci-dessous
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Info employé */}
       <div className="card" style={{ padding: '20px 24px', marginBottom: 16 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-700)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: 12 }}>
@@ -187,7 +262,95 @@ export default function DetailDemande() {
             </div>
           ))}
         </dl>
+
+        {/* Justification urgence — visible RH uniquement */}
+        {demande.type === 'sortie_urgente' && demande.justification_urgence && user.role === 'rh' && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--gray-100)' }}>
+            <dt style={{ fontSize: 11, fontWeight: 600, color: '#e67e00', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+              ⚡ Justification de l'urgence
+            </dt>
+            <div style={{ background: '#fffdf0', border: '1px solid #ffc107', borderLeft: '3px solid #e67e00', padding: '10px 14px', borderRadius: '0 8px 8px 0', fontSize: 14, color: 'var(--gray-700)', fontStyle: 'italic', marginBottom: 12 }}>
+              {demande.justification_urgence}
+            </div>
+
+            {/* Boutons d'acceptation RH — uniquement si pas encore traitée */}
+            {demande.justification_acceptee === null && (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  className="btn btn-success btn-sm"
+                  disabled={acceptingJustif}
+                  onClick={() => handleAccepterJustification(true)}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  {acceptingJustif ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <CheckCircle size={14} />}
+                  Accepter la justification
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  disabled={acceptingJustif}
+                  onClick={() => handleAccepterJustification(false)}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  {acceptingJustif ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <XCircle size={14} />}
+                  Refuser la justification
+                </button>
+              </div>
+            )}
+
+            {/* Résultat si déjà traitée */}
+            {demande.justification_acceptee === true && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#15803d' }}>
+                <CheckCircle size={15} /> Justification acceptée par le RH
+              </div>
+            )}
+            {demande.justification_acceptee === false && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#b91c1c' }}>
+                <XCircle size={15} /> Justification refusée par le RH
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Formulaire de soumission de justification (employé, sortie urgente sans justification) */}
+      {demande.type === 'sortie_urgente' && !demande.justification_urgence && user.role === 'employe' && demande.user_id === user.id && (
+        <div className="card" style={{ padding: '20px 24px', marginBottom: 16, border: '1.5px solid #fcd34d' }}>
+          <h3 style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Zap size={14} color="#e67e00" /> Soumettre la justification
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--gray-500)', marginBottom: 14 }}>
+            Votre sortie urgente a été approuvée automatiquement. Veuillez fournir une justification détaillée.
+          </p>
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <textarea
+              className="form-textarea"
+              rows={4}
+              placeholder="Expliquez en détail la raison de l'urgence (situation médicale, familiale, etc.)..."
+              value={justificationText}
+              onChange={e => setJustificationText(e.target.value)}
+              style={{ borderColor: '#fcd34d', background: '#fffdf0' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>Minimum 10 caractères</span>
+              <span style={{ fontSize: 11, color: justificationText.length > 900 ? 'var(--danger)' : 'var(--gray-400)' }}>
+                {justificationText.length}/1000
+              </span>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            disabled={submittingJustif || justificationText.trim().length < 10}
+            onClick={handleJustifier}
+            style={{ background: '#e67e00', borderColor: '#e67e00' }}
+          >
+            {submittingJustif
+              ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+              : <Zap size={15} />
+            }
+            Soumettre la justification
+          </button>
+        </div>
+      )}
 
       {/* Signatures Display */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -250,7 +413,7 @@ export default function DetailDemande() {
             />
           </div>
           
-          {!(user.role === 'rh' || (user.role === 'admin' && demande.statut === 'validee_responsable')) && (
+          {user.role !== 'rh' && (
             <SignaturePad 
               label="Signature du Responsable *"
               onSave={(sig) => setTraitement(p => ({ ...p, signature_manager: sig }))}

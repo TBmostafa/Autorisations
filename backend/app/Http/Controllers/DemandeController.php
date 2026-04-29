@@ -79,10 +79,11 @@ class DemandeController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'type' => 'required|in:conge,autorisation_absence,sortie',
+            'type' => 'required|in:conge,autorisation_absence,sortie,sortie_urgente',
             'date_debut' => 'required|date|after_or_equal:today',
             'date_fin' => 'required|date|after_or_equal:date_debut',
-            'motif' => 'required|string|max:1000',
+            'motif' => 'required_unless:type,sortie_urgente|nullable|string|max:1000',
+            'justification_urgence' => 'required_if:type,sortie_urgente|nullable|string|max:1000',
             'commentaire_employe' => 'nullable|string|max:500',
             'manager_id' => 'nullable|exists:users,id',
         ]);
@@ -103,6 +104,8 @@ class DemandeController extends Controller
             $managerId = $request->manager_id;
         }
 
+        $isSortieUrgente = $request->type === 'sortie_urgente';
+
         $demande = Demande::create([
             'user_id' => $user->id,
             'manager_id' => $managerId,
@@ -110,10 +113,66 @@ class DemandeController extends Controller
             'date_debut' => $request->date_debut,
             'date_fin' => $request->date_fin,
             'motif' => $request->motif,
+            'justification_urgence' => $request->justification_urgence,
             'commentaire_employe' => $request->commentaire_employe,
-            'statut' => 'en_attente_responsable',
+            'statut' => $isSortieUrgente ? 'validee_definitivement' : 'en_attente_responsable',
+            'date_traitement' => $isSortieUrgente ? now() : null,
             'signature_employe' => $request->signature_employe,
         ]);
+
+        if ($isSortieUrgente) {
+            // Notification in-app à l'employé : approbation automatique
+            Notification::create([
+                'user_id' => $user->id,
+                'titre' => '✅ Sortie urgente approuvée automatiquement',
+                'message' => "Votre demande de sortie urgente (Réf. " . str_pad($demande->id, 5, '0', STR_PAD_LEFT) . ") a été approuvée automatiquement par le système.",
+                'type' => 'success',
+                'demande_id' => $demande->id,
+            ]);
+
+            // Notification in-app au manager
+            if ($managerId) {
+                Notification::create([
+                    'user_id' => $managerId,
+                    'titre' => '⚡ Sortie urgente (auto-approuvée)',
+                    'message' => "{$user->name} a soumis une sortie urgente auto-approuvée. Réf : " . str_pad($demande->id, 5, '0', STR_PAD_LEFT),
+                    'type' => 'warning',
+                    'demande_id' => $demande->id,
+                ]);
+            }
+
+            // Notification in-app aux RH
+            $rhs = User::where('role', 'rh')->where('is_active', true)->get();
+            foreach ($rhs as $rh) {
+                Notification::create([
+                    'user_id' => $rh->id,
+                    'titre' => '⚡ Sortie urgente (auto-approuvée)',
+                    'message' => "{$user->name} a soumis une sortie urgente auto-approuvée. Réf : " . str_pad($demande->id, 5, '0', STR_PAD_LEFT),
+                    'type' => 'warning',
+                    'demande_id' => $demande->id,
+                ]);
+            }
+
+            // Notification aux admins
+            $admins = User::where('role', 'admin')->where('is_active', true)->get();
+            foreach ($admins as $admin) {
+                Notification::create([
+                    'user_id' => $admin->id,
+                    'titre' => '⚡ Sortie urgente (auto-approuvée)',
+                    'message' => "{$user->name} a soumis une sortie urgente auto-approuvée. Réf : " . str_pad($demande->id, 5, '0', STR_PAD_LEFT),
+                    'type' => 'warning',
+                    'demande_id' => $demande->id,
+                ]);
+            }
+
+            // Email de confirmation à l'employé
+            $this->emailService->notifierEmployeChangementStatut($demande->load('employe'));
+
+            return response()->json([
+                'message' => 'Sortie urgente soumise et approuvée automatiquement.',
+                'demande' => $demande->load(['employe.departement', 'manager']),
+            ], 201);
+        }
 
         // Notification au manager
         if ($managerId) {
@@ -235,7 +294,7 @@ class DemandeController extends Controller
         $user = $request->user();
         $demande = Demande::with('employe')->findOrFail($id);
 
-        if (!$user->isManager() && !$user->isRh() && !$user->isAdmin()) {
+        if (!$user->isManager() && !$user->isRh()) {
             return response()->json(['message' => 'Accès refusé.'], 403);
         }
 
@@ -258,9 +317,9 @@ class DemandeController extends Controller
             $updateData['signature_manager'] = $request->signature_manager;
         }
 
-        if ($user->isManager() || ($user->isAdmin() && in_array($request->statut, ['validee_responsable', 'refusee_responsable']))) {
+        if ($user->isManager()) {
             $updateData['commentaire_manager'] = $request->commentaire_manager;
-        } elseif ($user->isRh() || ($user->isAdmin() && in_array($request->statut, ['validee_definitivement', 'refusee_rh']))) {
+        } elseif ($user->isRh()) {
             if ($request->commentaire_manager) {
                 $updateData['commentaire_manager'] = $demande->commentaire_manager
                     ? $demande->commentaire_manager . "\nRH: " . $request->commentaire_manager
@@ -318,49 +377,188 @@ class DemandeController extends Controller
     }
 
     /**
-     * Statistiques dashboard
+     * Soumettre ou mettre à jour la justification d'une sortie urgente (employé)
+     */
+    public function justifier(Request $request, $id)
+    {
+        $user = $request->user();
+        $demande = Demande::with('employe')->findOrFail($id);
+
+        if ($demande->user_id !== $user->id) {
+            return response()->json(['message' => 'Accès refusé.'], 403);
+        }
+
+        if ($demande->type !== 'sortie_urgente') {
+            return response()->json(['message' => 'Cette action est réservée aux sorties urgentes.'], 422);
+        }
+
+        $request->validate([
+            'justification_urgence' => 'required|string|min:10|max:1000',
+        ]);
+
+        $demande->update(['justification_urgence' => $request->justification_urgence]);
+
+        // Notifier le manager
+        if ($demande->manager_id) {
+            Notification::create([
+                'user_id'    => $demande->manager_id,
+                'titre'      => '📋 Justification soumise',
+                'message'    => "{$user->name} a soumis la justification pour sa sortie urgente. Réf : " . str_pad($demande->id, 5, '0', STR_PAD_LEFT),
+                'type'       => 'info',
+                'demande_id' => $demande->id,
+            ]);
+        }
+
+        // Notifier les RH
+        $rhs = User::where('role', 'rh')->where('is_active', true)->get();
+        foreach ($rhs as $rh) {
+            Notification::create([
+                'user_id'    => $rh->id,
+                'titre'      => '📋 Justification soumise',
+                'message'    => "{$user->name} a soumis la justification pour sa sortie urgente. Réf : " . str_pad($demande->id, 5, '0', STR_PAD_LEFT),
+                'type'       => 'info',
+                'demande_id' => $demande->id,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Justification enregistrée avec succès.',
+            'demande' => $demande->fresh(['employe.departement', 'manager']),
+        ]);
+    }
+
+    /**
+     * Accepter ou refuser la justification d'une sortie urgente (RH uniquement)
+     */
+    public function accepterJustification(Request $request, $id)
+    {
+        $user = $request->user();
+
+        if (!$user->isRh()) {
+            return response()->json(['message' => 'Accès refusé. Réservé au service RH.'], 403);
+        }
+
+        $demande = Demande::with('employe')->findOrFail($id);
+
+        if ($demande->type !== 'sortie_urgente') {
+            return response()->json(['message' => 'Cette action est réservée aux sorties urgentes.'], 422);
+        }
+
+        if (!$demande->justification_urgence) {
+            return response()->json(['message' => 'Aucune justification soumise par l\'employé.'], 422);
+        }
+
+        $request->validate([
+            'acceptee' => 'required|boolean',
+        ]);
+
+        $demande->update(['justification_acceptee' => $request->acceptee]);
+
+        $label = $request->acceptee ? 'acceptée' : 'refusée';
+
+        // Notifier l'employé
+        Notification::create([
+            'user_id'    => $demande->user_id,
+            'titre'      => $request->acceptee ? '✅ Justification acceptée' : '❌ Justification refusée',
+            'message'    => "Votre justification pour la sortie urgente (Réf. " . str_pad($demande->id, 5, '0', STR_PAD_LEFT) . ") a été {$label} par le service RH.",
+            'type'       => $request->acceptee ? 'success' : 'error',
+            'demande_id' => $demande->id,
+        ]);
+
+        return response()->json([
+            'message' => "Justification {$label} avec succès.",
+            'demande' => $demande->fresh(['employe.departement', 'manager']),
+        ]);
+    }
+
+    /**
+     * Statistiques dashboard — requête unique avec agrégation en PHP
      */
     public function statistiques(Request $request)
     {
         $user = $request->user();
 
+        $query = Demande::query();
         if ($user->isEmploye()) {
-            $base = Demande::where('user_id', $user->id);
+            $query->where('user_id', $user->id);
         } elseif ($user->isManager()) {
-            $base = Demande::where('manager_id', $user->id);
-        } else {
-            $base = Demande::query();
+            $query->where('manager_id', $user->id);
         }
 
-        $stats = [
-            'total' => (clone $base)->count(),
-            'en_attente' => (clone $base)->whereIn('statut', ['en_attente_responsable', 'validee_responsable'])->count(),
-            'acceptees' => (clone $base)->where('statut', 'validee_definitivement')->count(),
-            'refusees' => (clone $base)->whereIn('statut', ['refusee_responsable', 'refusee_rh'])->count(),
-        ];
-
-        // Répartition par type
-        $parType = (clone $base)
-            ->selectRaw('type, count(*) as total')
-            ->groupBy('type')
-            ->get()
-            ->map(fn($item) => [
-                'type' => $item->type,
-                'libelle' => Demande::$types[$item->type] ?? $item->type,
-                'total' => $item->total,
-            ]);
-
-        // Demandes récentes
-        $recentes = (clone $base)
-            ->with(['employe:id,name', 'manager:id,name'])
-            ->orderBy('created_at', 'desc')
-            ->take(5)
+        // Une seule requête : on récupère type + statut pour tout calculer en mémoire
+        $rows = (clone $query)
+            ->selectRaw('type, statut, count(*) as cnt')
+            ->groupBy('type', 'statut')
             ->get();
 
+        $stats = ['total' => 0, 'en_attente' => 0, 'acceptees' => 0, 'refusees' => 0];
+        $parTypeMap = [];
+
+        foreach ($rows as $row) {
+            $stats['total'] += $row->cnt;
+            if (in_array($row->statut, ['en_attente_responsable', 'validee_responsable'])) {
+                $stats['en_attente'] += $row->cnt;
+            } elseif ($row->statut === 'validee_definitivement') {
+                $stats['acceptees'] += $row->cnt;
+            } elseif (in_array($row->statut, ['refusee_responsable', 'refusee_rh'])) {
+                $stats['refusees'] += $row->cnt;
+            }
+            $parTypeMap[$row->type] = ($parTypeMap[$row->type] ?? 0) + $row->cnt;
+        }
+
+        $parType = collect($parTypeMap)->map(fn($total, $type) => [
+            'type'    => $type,
+            'libelle' => Demande::$types[$type] ?? $type,
+            'total'   => $total,
+        ])->values();
+
+        // Demandes récentes (requête séparée mais légère)
+        $recentes = (clone $query)
+            ->with(['employe:id,name', 'manager:id,name'])
+            ->orderByDesc('created_at')
+            ->take(5)
+            ->get(['id', 'user_id', 'manager_id', 'type', 'statut', 'date_debut', 'date_fin', 'created_at']);
+
+        // Employés fréquents (admin, manager, rh uniquement)
+        $employesFrequents = [];
+        if ($user->isAdmin() || $user->isManager() || $user->isRh()) {
+            $baseQuery = Demande::query();
+            if ($user->isManager()) {
+                $baseQuery->where('manager_id', $user->id);
+            }
+
+            // Top 5 employés par nombre de demandes, avec répartition par type
+            $rows = $baseQuery
+                ->selectRaw('user_id, type, count(*) as cnt')
+                ->groupBy('user_id', 'type')
+                ->with('employe:id,name,email,poste,departement_id')
+                ->get();
+
+            // Agréger par employé
+            $byEmploye = [];
+            foreach ($rows as $row) {
+                $uid = $row->user_id;
+                if (!isset($byEmploye[$uid])) {
+                    $byEmploye[$uid] = [
+                        'employe' => $row->employe,
+                        'total'   => 0,
+                        'par_type' => [],
+                    ];
+                }
+                $byEmploye[$uid]['total'] += $row->cnt;
+                $byEmploye[$uid]['par_type'][$row->type] = $row->cnt;
+            }
+
+            // Trier par total décroissant, garder top 5
+            usort($byEmploye, fn($a, $b) => $b['total'] - $a['total']);
+            $employesFrequents = array_slice(array_values($byEmploye), 0, 5);
+        }
+
         return response()->json([
-            'stats' => $stats,
-            'par_type' => $parType,
-            'recentes' => $recentes,
+            'stats'              => $stats,
+            'par_type'           => $parType,
+            'recentes'           => $recentes,
+            'employes_frequents' => $employesFrequents,
         ]);
     }
 

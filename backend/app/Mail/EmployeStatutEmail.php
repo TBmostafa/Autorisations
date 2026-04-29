@@ -25,7 +25,7 @@ class EmployeStatutEmail extends Mailable implements ShouldQueue
     public const STATUT_LABELS = [
         'validee_responsable'    => 'Validée par votre responsable',
         'refusee_responsable'    => 'Refusée par votre responsable',
-        'validee_definitivement' => 'Validée définitivement par le service RH',
+        'validee_definitivement' => 'Validée définitivement',
         'refusee_rh'             => 'Refusée par le service RH',
     ];
 

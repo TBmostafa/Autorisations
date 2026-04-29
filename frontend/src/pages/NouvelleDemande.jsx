@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { demandeService, userService } from '../services/api.js';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Save, FileText } from 'lucide-react';
+import { ArrowLeft, Save, FileText, Zap } from 'lucide-react';
 import SignaturePad from '../components/shared/SignaturePad';
 
 const TYPES = [
   { value: 'conge', label: 'Congé' },
   { value: 'autorisation_absence', label: "Autorisation d'Absence" },
   { value: 'sortie', label: 'Autorisation de Sortie' },
+  { value: 'sortie_urgente', label: 'Sortie Urgente' },
 ];
 
 export default function NouvelleDemande({ editMode }) {
@@ -16,7 +17,7 @@ export default function NouvelleDemande({ editMode }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     type: '', date_debut: '', date_fin: '', motif: '', commentaire_employe: '',
-    heure_sortie: '', heure_retour: '', signature_employe: ''
+    heure_sortie: '', heure_retour: '', signature_employe: '', justification_urgence: ''
   });
   const [managers, setManagers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,7 @@ export default function NouvelleDemande({ editMode }) {
   const validate = () => {
     const errs = {};
     if (!form.type) errs.type = 'Veuillez choisir un type.';
-    if (form.type === 'sortie') {
+    if (form.type === 'sortie' || form.type === 'sortie_urgente') {
       if (!form.date_debut) errs.date_debut = 'Date requise.';
       if (!form.heure_sortie) errs.heure_sortie = 'Heure de sortie requise.';
       if (!form.heure_retour) errs.heure_retour = 'Heure de retour requise.';
@@ -61,7 +62,9 @@ export default function NouvelleDemande({ editMode }) {
       if (form.date_debut && form.date_fin && form.date_fin < form.date_debut)
         errs.date_fin = 'La date de fin doit être après la date de début.';
     }
-    if (!form.motif.trim()) errs.motif = 'Le motif est requis.';
+    if (!form.motif.trim() && !isUrgente) errs.motif = 'Le motif est requis.';
+    if (form.type === 'sortie_urgente' && !form.justification_urgence.trim())
+      errs.justification_urgence = 'La justification est obligatoire pour une sortie urgente.';
     if (!form.signature_employe) errs.signature_employe = 'Votre signature est requise.';
     return errs;
   };
@@ -73,7 +76,7 @@ export default function NouvelleDemande({ editMode }) {
 
     setLoading(true);
     let submitData = { ...form };
-    if (submitData.type === 'sortie') {
+    if (submitData.type === 'sortie' || submitData.type === 'sortie_urgente') {
       submitData.date_debut = `${submitData.date_debut} ${submitData.heure_sortie}:00`;
       submitData.date_fin = `${form.date_debut} ${submitData.heure_retour}:00`;
     }
@@ -84,7 +87,11 @@ export default function NouvelleDemande({ editMode }) {
         toast.success('Demande mise à jour avec succès !');
       } else {
         await demandeService.create(submitData);
-        toast.success('Demande soumise avec succès !');
+        if (submitData.type === 'sortie_urgente') {
+          toast.success('Sortie urgente approuvée automatiquement !', { duration: 5000, icon: '⚡' });
+        } else {
+          toast.success('Demande soumise avec succès !');
+        }
       }
       navigate('/demandes');
     } catch (err) {
@@ -101,6 +108,9 @@ export default function NouvelleDemande({ editMode }) {
     ? Math.max(0, (new Date(form.date_fin) - new Date(form.date_debut)) / 86400000 + 1)
     : null;
 
+  const isSortie = form.type === 'sortie' || form.type === 'sortie_urgente';
+  const isUrgente = form.type === 'sortie_urgente';
+
   return (
     <div className="fade-in" style={{ maxWidth: 680 }}>
       <div className="page-header">
@@ -113,10 +123,32 @@ export default function NouvelleDemande({ editMode }) {
         </div>
       </div>
 
+      {/* Bannière d'alerte sortie urgente */}
+      {isUrgente && (
+        <div style={{
+          background: 'linear-gradient(135deg, #fff3cd, #ffe69c)',
+          border: '1.5px solid #ffc107',
+          borderRadius: 12,
+          padding: '14px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}>
+          <Zap size={20} color="#e67e00" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#7d4e00' }}>Sortie urgente — Approbation automatique</div>
+            <div style={{ fontSize: 13, color: '#7d4e00', marginTop: 3, lineHeight: 1.5 }}>
+              Cette demande sera <strong>approuvée immédiatement</strong> par le système. Une justification détaillée est obligatoire et sera enregistrée avec la demande.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{ padding: '28px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid var(--gray-100)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <FileText size={22} color="var(--info)" />
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: isUrgente ? '#fff3cd' : 'var(--info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isUrgente ? <Zap size={22} color="#e67e00" /> : <FileText size={22} color="var(--info)" />}
           </div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Formulaire de demande</div>
@@ -136,7 +168,7 @@ export default function NouvelleDemande({ editMode }) {
           </div>
 
           {/* Dates */}
-          {form.type === 'sortie' ? (
+          {form.type === 'sortie' || form.type === 'sortie_urgente' ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label">Date *</label>
@@ -183,13 +215,43 @@ export default function NouvelleDemande({ editMode }) {
           )}
 
           {/* Motif */}
-          <div className="form-group">
-            <label className="form-label">Motif *</label>
-            <textarea className="form-textarea" rows={3}
-              placeholder="Décrivez le motif de votre demande..."
-              value={form.motif} onChange={e => set('motif', e.target.value)} />
-            {errors.motif && <span className="form-error">{errors.motif}</span>}
-          </div>
+          {!isUrgente && (
+            <div className="form-group">
+              <label className="form-label">Motif *</label>
+              <textarea className="form-textarea" rows={3}
+                placeholder="Décrivez le motif de votre demande..."
+                value={form.motif} onChange={e => set('motif', e.target.value)} />
+              {errors.motif && <span className="form-error">{errors.motif}</span>}
+            </div>
+          )}
+
+          {/* Justification urgence */}
+          {isUrgente && (
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Zap size={14} color="#e67e00" />
+                Justification de l'urgence
+                <span style={{ fontSize: 11, color: 'var(--gray-400)', fontWeight: 400 }}>(optionnelle — peut être ajoutée après)</span>
+              </label>
+              <textarea
+                className="form-textarea"
+                rows={4}
+                placeholder="Expliquez en détail la raison de l'urgence (situation médicale, familiale, etc.)..."
+                value={form.justification_urgence}
+                onChange={e => set('justification_urgence', e.target.value)}
+                style={{ borderColor: errors.justification_urgence ? 'var(--danger)' : '#ffc107', background: '#fffdf0' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                {errors.justification_urgence
+                  ? <span className="form-error">{errors.justification_urgence}</span>
+                  : <span style={{ fontSize: 11, color: 'var(--gray-400)' }}>Cette justification sera enregistrée et consultable par votre responsable et les RH.</span>
+                }
+                <span style={{ fontSize: 11, color: form.justification_urgence.length > 900 ? 'var(--danger)' : 'var(--gray-400)', flexShrink: 0, marginLeft: 8 }}>
+                  {form.justification_urgence.length}/1000
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Signature */}
           <SignaturePad 
@@ -200,9 +262,15 @@ export default function NouvelleDemande({ editMode }) {
           {errors.signature_employe && <span className="form-error" style={{ marginTop: -12, display: 'block' }}>{errors.signature_employe}</span>}
 
           {/* Auto assign message */}
-          <div style={{ background: 'var(--success-bg)', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 16 }}>✓</span> Le responsable sera assigné automatiquement
-          </div>
+          {isUrgente ? (
+            <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#7d4e00', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Zap size={16} color="#e67e00" /> Cette demande sera approuvée automatiquement dès la soumission
+            </div>
+          ) : (
+            <div style={{ background: 'var(--success-bg)', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>✓</span> Le responsable sera assigné automatiquement
+            </div>
+          )}
  
           {/* Actions */}
           <div style={{ display: 'flex', gap: 12, paddingTop: 8, borderTop: '1px solid var(--gray-100)' }}>
